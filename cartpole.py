@@ -10,6 +10,7 @@ from gym import spaces, logger
 from gym.utils import seeding
 import numpy as np
 import control
+from simple_pid import PID
 
 
 class CartPoleEnv():
@@ -26,8 +27,8 @@ class CartPoleEnv():
         # Angle at which to fail the episode
         # self.theta_threshold_radians = 12 * 2 * math.pi / 360
         # self.x_threshold = 2.4
-        self.theta_threshold_radians = 360 * 2 * math.pi / 360
-        self.x_threshold = 100
+        self.theta_threshold_radians = 12 * 100 * math.pi / 360
+        self.x_threshold = 2.4 * 100
 
         self.optimal_lqr_controller = self.compute_lqr_controller()
 
@@ -38,12 +39,16 @@ class CartPoleEnv():
             self.theta_threshold_radians * 2,
             np.finfo(np.float32).max])
 
-        self.action_space = spaces.Box(low=-10, high=10, shape=(1,), dtype=np.float32)
+        self.action_space = spaces.Box(low=-100, high=100, shape=(1,), dtype=np.float32)
         self.observation_space = spaces.Box(-high, high)
 
         self.seed()
         self.viewer = None
         self.state = None
+        self.previous_state = None
+        self.previous_action = None
+
+        self.pid = PID(1, 0.1, 0.05, setpoint=1)
 
         self.steps_beyond_done = None
 
@@ -54,13 +59,15 @@ class CartPoleEnv():
     def step(self, action):
         state = self.state
         action = - np.dot(self.optimal_lqr_controller, state) + action
+        if self.previous_action is None:
+            self.previous_action = action
         # assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
         x, x_dot, theta, theta_dot = state
         costheta = math.cos(theta)
         sintheta = math.sin(theta)
         temp = (action[0] + self.polemass_length * theta_dot * theta_dot * sintheta) / self.total_mass
         thetaacc = (self.gravity * sintheta - costheta * temp) / (
-                    self.length * (4.0 / 3.0 - self.masspole * costheta * costheta / self.total_mass))
+                self.length * (4.0 / 3.0 - self.masspole * costheta * costheta / self.total_mass))
         xacc = temp - self.polemass_length * thetaacc * costheta / self.total_mass
         x = x + self.tau * x_dot
         x_dot = x_dot + self.tau * xacc
@@ -74,11 +81,12 @@ class CartPoleEnv():
         done = bool(done)
 
         if not done:
-            reward = 1.0 * - float(self.compute_cost(np.array(self.state), action))
+            reward = 1.0 * (1 + float(
+                self.compute_cost(np.array(self.state), np.array(self.previous_state), action, self.previous_action)))
         elif self.steps_beyond_done is None:
             # Pole just fell!
             self.steps_beyond_done = 0
-            reward = 1.0
+            reward = 0.0
         else:
             if self.steps_beyond_done == 0:
                 logger.warn(
@@ -86,13 +94,18 @@ class CartPoleEnv():
             self.steps_beyond_done += 1
             reward = 0.0
 
-        return np.array(self.state), reward, done, {}
+        self.previous_state = self.state
+        self.previous_action = action
+
+        return np.array(self.state), reward, done, {'action_lqr': - np.dot(self.optimal_lqr_controller, state)}
 
     def reset(self, init_state=None):
         if init_state is None:
-            self.state = self.np_random.uniform(low=-0.1, high=0.1, size=(4,))
+            # self.state = self.observation_space.sample()
+            self.state = self.np_random.uniform(low=-3, high=3, size=(4,))
         else:
             self.state = init_state
+        self.previous_state = self.state
         self.steps_beyond_done = None
         return np.array(self.state)
 
@@ -152,11 +165,11 @@ class CartPoleEnv():
              [0, 0, self.total_mass * self.gravity / (self.length * self.masscart), 0]])
         B = np.array([[0], [1 / self.masscart], [0], [-1 / (self.length * self.masscart)]])
         Q = np.eye(4)
-        R = 1
+        R = 0.1
         K, _, _ = control.lqr(A, B, Q, R)
         return K
 
-    def compute_cost(self, state, action):
-        Q = 10 * np.eye(4)
-        R = 1
-        return - np.dot(state.T, np.dot(Q, state)) + R * action**2
+    def compute_cost(self, state, previous_state, action, previous_action):
+        Q = np.eye(4)
+        R = 0.1
+        return - np.dot(state.T, np.dot(Q, state)) - R * action ** 2
