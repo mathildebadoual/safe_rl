@@ -2,7 +2,7 @@
 
 To run the training use:
 
-```python
+```shell
 python run_hybrid_controller_trpo.py
 python run_hybrid_controller_vpg.py
 ```
