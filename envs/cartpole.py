@@ -103,12 +103,12 @@ class CartPoleEnv():
         screen_width = 600
         screen_height = 400
 
-        world_width = self.x_threshold * 2
+        world_width = self.x_threshold * 2 / 1000
         # world_width = 2.4 * 2
         scale = screen_width / world_width
         carty = 100  # TOP OF CART
         polewidth = 10.0
-        polelen = scale * 1.0
+        polelen = scale * 1.0 / 10
         cartwidth = 50.0
         cartheight = 30.0
 
