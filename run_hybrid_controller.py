@@ -1,16 +1,19 @@
+import os
 from sys import platform as sys_pf
+
+from spinup.utils.run_utils import setup_logger_kwargs
+from spinup.utils.test_policy import load_policy
+
+from agents.virtual_pid import PID
 
 if sys_pf == 'darwin':
     import matplotlib
 
     matplotlib.use("TkAgg")
     import matplotlib.pyplot as plt
-from cartpole import CartPoleEnv
-import os
+from envs.cartpole import CartPoleEnvDiscrete
 import spinup.algos.trpo.core as core
-from spinup import trpo
-from spinup.utils.test_policy import load_policy, run_policy
-from spinup.utils.run_utils import setup_logger_kwargs
+from spinup import trpo, vpg
 from spinup.utils.plot import make_plots
 from spinup.utils.mpi_tools import mpi_fork
 import numpy as np
@@ -19,7 +22,7 @@ import math
 from scipy.integrate import odeint
 
 
-def test_with_rl(env, init_state, get_action):
+def test_with_controller(exp_name, env, init_state, controller_description, feedback_controller):
     obs = env.reset(init_state=init_state)
     max_steps = 1000
     x_list = []
@@ -27,7 +30,6 @@ def test_with_rl(env, init_state, get_action):
     theta_list = []
     thetadot_list = []
     action_list = [0]
-    action_lqr = [0]
     reward_list = [0]
     # env.render()
 
@@ -37,80 +39,49 @@ def test_with_rl(env, init_state, get_action):
         xdot_list.append(state[1])
         theta_list.append(state[2])
         thetadot_list.append(state[3])
-        # action, _states = model.predict(obs)
-        action = get_action(obs)
+        t = env.tau * i
+        action = feedback_controller(t, state)
         action_list.append(action)
         try:
-            obs, r, done, info = env.step(action)
+            obs, r, done = env.step(action)
+            reward_list.append(r)
         except AssertionError:
             done = True
-        action_lqr.append(info['action_lqr'])
-        reward_list.append(r)
         # env.render()
         if done:
             break
 
     env.close()
 
+    fig, ax = plt.subplots(2, 1)
     plt.figure(figsize=(10, 7))
-    plt.plot(x_list, label='x')
-    plt.plot(xdot_list, label='x dot')
-    plt.plot(theta_list, label='theta')
-    plt.plot(thetadot_list, label='theta dot')
-    plt.plot(action_list, label='action rl')
-    plt.plot(action_lqr, label='action lqr')
-    plt.plot(reward_list, label='reward')
-    plt.grid()
-    plt.legend()
-    plt.savefig('figures/state_rl_trpo.png')
+    ax[0].plot(x_list, label='x')
+    ax[0].plot(xdot_list, label='x dot')
+    ax[0].plot(theta_list, label='theta')
+    ax[0].plot(thetadot_list, label='theta dot')
+    ax[0].plot(action_list, label='action %s' % controller_description)
+    ax[1].plot(reward_list, label='reward')
+
+    ax[0].grid()
+    ax[0].legend()
+    ax[1].grid()
+    ax[1].legend()
+    fig.savefig('figures/state_%s_%s.png' % (controller_description, exp_name))
 
 
-def test_with_lqr(env, init_state):
-    obs = env.reset(init_state=init_state)
-    max_steps = 1000
-    x_list = []
-    xdot_list = []
-    theta_list = []
-    thetadot_list = []
-    action_list = [0]
-    action_lqr = [0]
-    reward_list = [0]
-    # env.render()
-
-    for i in range(max_steps):
-        state = obs
-        x_list.append(state[0])
-        xdot_list.append(state[1])
-        theta_list.append(state[2])
-        thetadot_list.append(state[3])
-        action = 0
-        action_list.append(action)
-        try:
-            obs, r, done, info = env.step(action)
-        except AssertionError:
-            done = True
-        action_lqr.append(info['action_lqr'])
-        reward_list.append(r)
-        # env.render()
-        if done:
-            break
-
-    env.close()
-
-    plt.figure(figsize=(10, 7))
-    plt.plot(x_list, label='x')
-    plt.plot(xdot_list, label='x dot')
-    plt.plot(theta_list, label='theta')
-    plt.plot(thetadot_list, label='theta dot')
-    plt.plot(action_list, label='action rl')
-    plt.plot(action_lqr, label='action lqr')
-    plt.plot(reward_list, label='reward')
-    plt.grid()
-    plt.legend()
-    plt.savefig('figures/state_lqr_trpo.png')
+def test_with_pid(exp_name, env, init_state, pid):
+    test_with_controller(exp_name, env, init_state, 'pid', lambda t, state: pid(t, state[0]))
 
 
-def test_system_difference(env, get_action, init_state):
+def test_with_rl(exp_name, env, init_state, get_action):
+    test_with_controller(exp_name, env, init_state, 'rl', lambda t, state: get_action(state))
+
+
+def test_with_lqr(exp_name, env, init_state):
+    test_with_controller(exp_name, env, init_state, 'lqr', lambda t, state: 0)
+
+
+def test_system_difference(env, get_action, pid, init_state):
     max_steps = 1000
     gravity = 9.8
     masscart = 1.0
@@ -136,6 +107,11 @@ def test_system_difference(env, get_action, init_state):
         dydt = np.dot(A, x) + np.dot(B, - np.dot(K, x) + get_action(x))
         return dydt
 
+    def nonlinear_model_pid(x, t):
+        pid_val = pid(t, x[0])
+        dydt = np.dot(A, x) + np.dot(B, (- np.dot(K, x) + pid_val))
+        return dydt
+
     def nonlinear_model(x, t):
         dydt = np.array([0, 0, 0, 0])
         costheta = math.cos(x[2])
@@ -158,32 +134,35 @@ def test_system_difference(env, get_action, init_state):
     # solve ODE
     x_linear = odeint(linear_model, x0, t)
     x_nonlinear_rl = odeint(nonlinear_model_rl, x0, t)
+    x_nonlinear_pid = odeint(nonlinear_model_pid, x0, t)
     x_nonlinear = odeint(nonlinear_model, x0, t)
 
     plt.figure(figsize=(10, 7))
-    plt.plot([x_linear[i][0] for i in range(len(x_linear))],
-             [x_linear[i][1] for i in range(len(x_linear))],
-             color='blue', label='linear')
-    plt.plot(x_linear[0][0], x_linear[0][1], color='blue', marker='o')
-    plt.plot([x_nonlinear_rl[i][0] for i in range(len(x_nonlinear_rl))],
-             [x_nonlinear_rl[i][1] for i in range(len(x_nonlinear_rl))],
-             color='green', label='non linear')
-    plt.plot(x_nonlinear_rl[0][0], x_nonlinear_rl[0][1], color='green',
-             marker='o')
-    plt.grid()
-    plt.legend()
-    plt.savefig('figures/phase_models.png')
 
-    plt.figure(figsize=(10, 7))
-    plt.plot([x_linear[i][0] for i in range(len(x_linear))], color='blue',
-             label='linear')
-    plt.plot([x_nonlinear_rl[i][0] for i in range(len(x_nonlinear_rl))],
-             color='orange', label='non linear rl')
-    plt.plot([x_nonlinear[i][0] for i in range(len(x_nonlinear))],
-             label='non linear true')
-    plt.grid()
-    plt.legend()
-    plt.savefig('figures/models.png')
+    fig_phase, ax_phase = plt.subplots()
+    fig_time, ax_time = plt.subplots()
+
+    for label, (x, color) in {
+        'linear': (x_linear, 'blue'),
+        'non linear true': (x_nonlinear, 'black'),
+        'non linear rl': (x_nonlinear_rl, 'orange'),
+        'non linear + PID': (x_nonlinear_pid, 'purple')
+    }.items():
+        ax_phase.plot([x[i][0] for i in range(len(x))],
+                 [x[i][1] for i in range(len(x))],
+                 color=color, label=label)
+        ax_phase.scatter(x[0][0], x[0][1], color=color, marker='o')
+        ax_phase.grid()
+        ax_phase.legend()
+
+        ax_time.plot([x[i][0] for i in range(len(x))], color=color, label=label)
+        ax_time.grid()
+        ax_time.legend()
+
+    fig_phase.set_size_inches(10, 7)
+    fig_time.set_size_inches(10, 7)
+    fig_phase.savefig('figures/phase_models.png')
+    fig_time.savefig('figures/models.png')
 
 
 if __name__ == '__main__':
@@ -197,7 +176,7 @@ if __name__ == '__main__':
     parser.add_argument('--cpu', type=int, default=4)
     parser.add_argument('--steps', type=int, default=4000)
     parser.add_argument('--epochs', type=int, default=50)
-    parser.add_argument('--exp_name', type=str, default='trpo')
+    parser.add_argument('--exp_name', type=str)
     parser.add_argument('--test', '-t', action='store_true')
     parser.add_argument('--plot', '-p', action='store_true')
     parser.add_argument('--legend', '-l', nargs='*')
@@ -208,9 +187,17 @@ if __name__ == '__main__':
     parser.add_argument('--select', nargs='*')
     parser.add_argument('--exclude', nargs='*')
     parser.add_argument('--est', default='mean')
+    parser.add_argument('--data-dir')
+    parser.add_argument('--vpg', action='store_true', default=False)
+
     args = parser.parse_args()
 
-    logger_kwargs = setup_logger_kwargs(args.exp_name, args.seed)
+    if args.exp_name is not None:
+        exp_name = args.exp_name
+    else:
+        exp_name = 'vpg' if args.vpg else 'trpo'
+
+    logger_kwargs = setup_logger_kwargs(exp_name, args.seed, data_dir=args.data_dir)
 
     # init_state = [0, 2.87, 0, 2.87]
     init_state = [0.1, 0, 0, 0]
@@ -222,17 +209,28 @@ if __name__ == '__main__':
                    smooth=args.smooth, select=args.select, exclude=args.exclude,
                    estimator=args.est)
     else:
+        env_fn = CartPoleEnvDiscrete
         if not args.test:
             mpi_fork(args.cpu)  # run parallel code with mpi
-            trpo(env_fn=CartPoleEnv, actor_critic=core.mlp_actor_critic,
-                 ac_kwargs=dict(hidden_sizes=[args.hid] * args.l),
-                 gamma=args.gamma,
-                 seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
-                 logger_kwargs=logger_kwargs)
+            if args.vpg:
+                print("Using vpg for training.")
+                vpg(env_fn=env_fn, actor_critic=core.mlp_actor_critic,
+                    ac_kwargs=dict(hidden_sizes=[args.hid] * args.l), gamma=args.gamma,
+                    seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
+                    # pi_lr=3e-6, vf_lr=1e-4,
+                    logger_kwargs=logger_kwargs)
+            else:
+                print("Using trpo for training.")
+                trpo(env_fn=env_fn, actor_critic=core.mlp_actor_critic,
+                     ac_kwargs=dict(hidden_sizes=[args.hid] * args.l),
+                     gamma=args.gamma,
+                     seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
+                     logger_kwargs=logger_kwargs)
         else:
-            env = CartPoleEnv()
-            _, get_action = load_policy(
-                args.exp_name + '/' + args.exp_name + '_s' + str(args.seed))
-            test_with_rl(env, init_state, get_action)
-            test_with_lqr(env, init_state)
-            test_system_difference(env, get_action, init_state)
+            env = env_fn()
+            pid = PID(1, 0.1, 0.05, setpoint=0)
+            _, rl_action = load_policy(logger_kwargs['output_dir'])
+            test_with_rl(exp_name, env, init_state, rl_action)
+            test_with_lqr(exp_name, env, init_state)
+            test_with_pid(exp_name, env, init_state, pid)
+            test_system_difference(env, rl_action, pid, init_state)
