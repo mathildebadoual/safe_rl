@@ -2,14 +2,11 @@ import argparse
 
 import matplotlib.pyplot as plt
 
-from agents.lqr_controller import LqrController
-from envs.cartpole import CartPoleEnvContinous, CartPoleEnvDiscrete
+from agents.controllers import LqrController, PidController
+from envs.cartpole import CartPoleEnvContinous
 
 
-def run_lqr_controller_continuous_env(render=False, max_steps=1000):
-    env = CartPoleEnvContinous()
-    controller = LqrController(env)
-
+def run_controller(env, controller, max_steps=1000, render=False):
     obs = env.reset()
     print('initial observation:', obs)
     x_list = []
@@ -21,12 +18,14 @@ def run_lqr_controller_continuous_env(render=False, max_steps=1000):
         env.render()
 
     for i in range(max_steps):
+
         state = obs
         x_list.append(state[0])
         xdot_list.append(state[1])
         theta_list.append(state[2])
         thetadot_list.append(state[3])
-        action = controller.get_action(state)
+        t = i * env.tau
+        action = controller.get_action(t, state)
         action_list.append(action)
         try:
             obs, r, done = env.step(action)
@@ -69,6 +68,19 @@ if __name__ == '__main__':
     parser.add_argument('--max_steps', type=int, default=1000)
     args = parser.parse_args()
 
-    saved_dict = run_lqr_controller_continuous_env(render=args.render,
-                                                   max_steps=args.max_steps)
+    env = CartPoleEnvContinous()
+
+    if args.name == 'lqr_controller':
+        controller = LqrController(env)
+    elif args.name == 'pid_controller':
+        controller = PidController()
+    else:
+        raise ValueError("Invalid controller name given. Was %s" % args.name)
+
+    saved_dict = run_controller(
+        env=env,
+        render=args.render,
+        max_steps=args.max_steps,
+        controller=controller,
+    )
     plot_results(saved_dict, args.name)

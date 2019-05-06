@@ -4,14 +4,14 @@ from sys import platform as sys_pf
 from spinup.utils.run_utils import setup_logger_kwargs
 from spinup.utils.test_policy import load_policy
 
-from agents.virtual_pid import PID
+from agents.controllers import PidController
 
 if sys_pf == 'darwin':
     import matplotlib
 
     matplotlib.use("TkAgg")
     import matplotlib.pyplot as plt
-from envs.cartpole import CartPoleEnvDiscrete
+from envs.cartpole import CartPoleEnvContinous
 import spinup.algos.trpo.core as core
 from spinup import trpo, vpg
 from spinup.utils.plot import make_plots
@@ -22,7 +22,7 @@ import math
 from scipy.integrate import odeint
 
 
-def test_with_controller(exp_name, env, init_state, controller_description, feedback_controller):
+def test_with_controller(env, init_state, feedback_controller):
     obs = env.reset(init_state=init_state)
     max_steps = 1000
     x_list = []
@@ -53,15 +53,25 @@ def test_with_controller(exp_name, env, init_state, controller_description, feed
 
     env.close()
 
+    return {
+        'x': x_list,
+        'xdot': xdot_list,
+        'theta': theta_list,
+        'thetadot': thetadot_list,
+        'action': action_list,
+        'reward': reward_list,
+    }
+
+
+def plot_figures(saved_dict, exp_name, controller_description):
     fig, ax = plt.subplots(2, 1)
     plt.figure(figsize=(10, 7))
-    ax[0].plot(x_list, label='x')
-    ax[0].plot(xdot_list, label='x dot')
-    ax[0].plot(theta_list, label='theta')
-    ax[0].plot(thetadot_list, label='theta dot')
-    ax[0].plot(action_list, label='action %s' % controller_description)
-    ax[1].plot(reward_list, label='reward')
-
+    ax[0].plot(saved_dict['x'], label='x')
+    ax[0].plot(saved_dict['xdot'], label='x dot')
+    ax[0].plot(saved_dict['theta'], label='theta')
+    ax[0].plot(saved_dict['thetadot'], label='theta dot')
+    ax[0].plot(saved_dict['action'], label='action %s' % controller_description)
+    ax[1].plot(saved_dict['reward'], label='reward')
     ax[0].grid()
     ax[0].legend()
     ax[1].grid()
@@ -69,16 +79,15 @@ def test_with_controller(exp_name, env, init_state, controller_description, feed
     fig.savefig('figures/state_%s_%s.png' % (controller_description, exp_name))
 
 
-def test_with_pid(exp_name, env, init_state, pid):
-    test_with_controller(exp_name, env, init_state, 'pid', lambda t, state: pid(t, state[0]))
+def test_with_pid(env, init_state, pid):
+    return test_with_controller(env, init_state, pid.get_action)
+
+def test_with_rl(env, init_state, get_action):
+    return test_with_controller(env, init_state, lambda t, state: get_action(state))
 
 
-def test_with_rl(exp_name, env, init_state, get_action):
-    test_with_controller(exp_name, env, init_state, 'rl', lambda t, state: get_action(state))
-
-
-def test_with_lqr(exp_name, env, init_state):
-    test_with_controller(exp_name, env, init_state, 'lqr', lambda t, state: 0)
+def test_with_lqr(env, init_state):
+    return test_with_controller(env, init_state, lambda t, state: 0)
 
 
 def test_system_difference(env, get_action, pid, init_state):
@@ -108,7 +117,7 @@ def test_system_difference(env, get_action, pid, init_state):
         return dydt
 
     def nonlinear_model_pid(x, t):
-        pid_val = pid(t, x[0])
+        pid_val = pid.get_action(t, x)
         dydt = np.dot(A, x) + np.dot(B, (- np.dot(K, x) + pid_val))
         return dydt
 
@@ -209,7 +218,7 @@ if __name__ == '__main__':
                    smooth=args.smooth, select=args.select, exclude=args.exclude,
                    estimator=args.est)
     else:
-        env_fn = CartPoleEnvDiscrete
+        env_fn = CartPoleEnvContinous
         if not args.test:
             mpi_fork(args.cpu)  # run parallel code with mpi
             if args.vpg:
@@ -228,9 +237,15 @@ if __name__ == '__main__':
                      logger_kwargs=logger_kwargs)
         else:
             env = env_fn()
-            pid = PID(1, 0.1, 0.05, setpoint=0)
+            pid = PidController()
             _, rl_action = load_policy(logger_kwargs['output_dir'])
-            test_with_rl(exp_name, env, init_state, rl_action)
-            test_with_lqr(exp_name, env, init_state)
-            test_with_pid(exp_name, env, init_state, pid)
+            d = test_with_rl(env, init_state, rl_action)
+            plot_figures(d, exp_name, 'rl')
+
+            d = test_with_lqr(env, init_state)
+            plot_figures(d, exp_name, 'lqr')
+
+            d = test_with_pid(env, init_state, pid)
+            plot_figures(d, exp_name, 'pid')
+
             test_system_difference(env, rl_action, pid, init_state)
