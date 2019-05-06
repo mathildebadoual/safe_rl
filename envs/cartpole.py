@@ -20,10 +20,8 @@ class CartPoleEnv():
         # Angle at which to fail the episode
         # self.theta_threshold_radians = 12 * 2 * math.pi / 360
         # self.x_threshold = 2.4
-        self.theta_threshold_sradians = 12 * 100 * math.pi / 360
+        self.theta_threshold_radians = 12 * 100 * math.pi / 360
         self.x_threshold = 2.4 * 100
-
-        self.optimal_lqr_controller = self.compute_lqr_controller()
 
         high = np.array([
             self.x_threshold * 2,
@@ -44,11 +42,11 @@ class CartPoleEnv():
     def step(self):
         raise NotImplementedError
 
-    def dynamics_step(self, state, force):
+    def dynamics_step(self, state, action):
         x, x_dot, theta, theta_dot = state
         costheta = math.cos(theta)
         sintheta = math.sin(theta)
-        temp = (force + self.polemass_length * theta_dot * theta_dot *
+        temp = (action + self.polemass_length * theta_dot * theta_dot *
                 sintheta) / self.total_mass
         thetaacc = (self.gravity * sintheta - costheta * temp) / (
             self.length * (4.0 / 3.0 - self.masspole * costheta *
@@ -59,7 +57,7 @@ class CartPoleEnv():
         x_dot = x_dot + self.tau * xacc
         theta = theta + self.tau * theta_dot
         theta_dot = theta_dot + self.tau * thetaacc
-        self.state = (x, x_dot, theta, theta_dot)
+        self.state = np.array((x, x_dot, theta, theta_dot))
         done = x < -self.x_threshold \
             or x > self.x_threshold \
             or theta < -self.theta_threshold_radians \
@@ -69,8 +67,8 @@ class CartPoleEnv():
         if not done:
             reward = float(
                 self.compute_cost(
-                    np.array(self.state),
-                    force))
+                    self.state,
+                    action))
         elif self.steps_beyond_done is None:
             # Pole just fell!
             self.steps_beyond_done = 0
@@ -105,8 +103,8 @@ class CartPoleEnv():
         screen_width = 600
         screen_height = 400
 
-        # world_width = self.x_threshold * 2
-        world_width = 2.4 * 2
+        world_width = self.x_threshold * 2
+        # world_width = 2.4 * 2
         scale = screen_width / world_width
         carty = 100  # TOP OF CART
         polewidth = 10.0
@@ -163,15 +161,14 @@ class CartPoleEnv():
 
 class CartPoleEnvContinous(CartPoleEnv):
     def __init__(self):
-        super(CartPoleEnvDiscrete, self).__init__()
-        self.action_space = spaces.Box(low=-1, high=1, shape=(1,),
+        super(CartPoleEnvContinous, self).__init__()
+        self.action_space = spaces.Box(low=-10, high=10, shape=(1,),
                                        dtype=np.float32)
 
     def step(self, action):
         state = self.state
         if self.previous_action is None:
             self.previous_action = action
-        assert self.action_space.contains(action), "invalid action"
 
         done, reward = self.dynamics_step(state, action)
 
@@ -191,7 +188,6 @@ class CartPoleEnvDiscrete(CartPoleEnv):
         state = self.state
         if self.previous_action is None:
             self.previous_action = action
-        assert self.action_space.contains(action), "invalid action"
         force = self.force_mag if action == 1 else -self.force_mag
 
         done, reward = self.dynamics_step(state, force)

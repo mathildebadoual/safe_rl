@@ -19,7 +19,7 @@ def test_with_rl(env, init_state, get_action):
     action_list = [0]
     action_lqr = [0]
     reward_list = [0]
-    env.render()
+    # env.render()
 
     for i in range(max_steps):
         state = obs
@@ -36,7 +36,7 @@ def test_with_rl(env, init_state, get_action):
             done = True
         action_lqr.append(info['action_lqr'])
         reward_list.append(r)
-        env.render()
+        # env.render()
         if done:
             break
 
@@ -65,7 +65,7 @@ def test_with_lqr(env, init_state):
     action_list = [0]
     action_lqr = [0]
     reward_list = [0]
-    env.render()
+    # env.render()
 
     for i in range(max_steps):
         state = obs
@@ -81,7 +81,7 @@ def test_with_lqr(env, init_state):
             done = True
         action_lqr.append(info['action_lqr'])
         reward_list.append(r)
-        env.render()
+        # env.render()
         if done:
             break
 
@@ -128,22 +128,26 @@ if __name__ == '__main__':
 
     logger_kwargs = setup_logger_kwargs(args.exp_name, args.seed)
 
-    init_state = [0, 0.1, 0, 0.1]
+    init_state = [0, 0, 0, 0.1]
 
     if args.plot:
-        directory = [os.path.join(os.path.dirname(os.path.realpath(__file__)), args.exp_name)]
+        directory = [os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                  args.exp_name)]
         make_plots(directory, args.legend, args.xaxis, args.value, args.count,
                smooth=args.smooth, select=args.select, exclude=args.exclude,
                estimator=args.est)
     else:
         if not args.test:
             vpg(env_fn=CartPoleEnv, actor_critic=core.mlp_actor_critic,
-                ac_kwargs=dict(hidden_sizes=[args.hid] * args.l), gamma=args.gamma,
+                ac_kwargs=dict(hidden_sizes=[args.hid] * args.l),
+                gamma=args.gamma,
                 seed=args.seed, steps_per_epoch=args.steps, epochs=args.epochs,
                 # pi_lr=3e-6, vf_lr=1e-4,
                 logger_kwargs=logger_kwargs)
         else:
             env = CartPoleEnv()
-            _, get_action = load_policy(args.exp_name + '/' + args.exp_name + '_s' + str(args.seed))
+            print('testing')
+            _, get_action = load_policy(args.exp_name + '/' + args.exp_name +
+                                        '_s' + str(args.seed))
             test_with_rl(env, init_state, get_action)
             test_with_lqr(env, init_state)
