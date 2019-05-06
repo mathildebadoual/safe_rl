@@ -1,0 +1,40 @@
+{
+    "ac_kwargs":	{
+        "hidden_sizes":	[
+            64,
+            64
+        ]
+    },
+    "actor_critic":	"mlp_actor_critic",
+    "env_fn":	"CartPoleEnv",
+    "epochs":	1000,
+    "exp_name":	"vpg",
+    "gamma":	0.99,
+    "lam":	0.97,
+    "logger":	{
+        "<spinup.utils.logx.EpochLogger object at 0x130576b00>":	{
+            "epoch_dict":	{},
+            "exp_name":	"vpg",
+            "first_row":	true,
+            "log_current_row":	{},
+            "log_headers":	[],
+            "output_dir":	"/Users/mathildebadoual/code/safe_rl/vpg/vpg_s0",
+            "output_file":	{
+                "<_io.TextIOWrapper name='/Users/mathildebadoual/code/safe_rl/vpg/vpg_s0/progress.txt' mode='w' encoding='UTF-8'>":	{
+                    "mode":	"w"
+                }
+            }
+        }
+    },
+    "logger_kwargs":	{
+        "exp_name":	"vpg",
+        "output_dir":	"/Users/mathildebadoual/code/safe_rl/vpg/vpg_s0"
+    },
+    "max_ep_len":	1000,
+    "pi_lr":	0.0003,
+    "save_freq":	10,
+    "seed":	0,
+    "steps_per_epoch":	1100,
+    "train_v_iters":	80,
+    "vf_lr":	0.001
+}

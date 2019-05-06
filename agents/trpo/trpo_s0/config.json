@@ -1,0 +1,45 @@
+{
+    "ac_kwargs":	{
+        "hidden_sizes":	[
+            64,
+            64
+        ]
+    },
+    "actor_critic":	"mlp_actor_critic",
+    "algo":	"trpo",
+    "backtrack_coeff":	0.8,
+    "backtrack_iters":	10,
+    "cg_iters":	10,
+    "damping_coeff":	0.1,
+    "delta":	0.01,
+    "env_fn":	"CartPoleEnv",
+    "epochs":	200,
+    "exp_name":	"trpo",
+    "gamma":	0.99,
+    "lam":	0.97,
+    "logger":	{
+        "<spinup.utils.logx.EpochLogger object at 0x128200b38>":	{
+            "epoch_dict":	{},
+            "exp_name":	"trpo",
+            "first_row":	true,
+            "log_current_row":	{},
+            "log_headers":	[],
+            "output_dir":	"/Users/mathildebadoual/code/safe_rl/trpo/trpo_s0",
+            "output_file":	{
+                "<_io.TextIOWrapper name='/Users/mathildebadoual/code/safe_rl/trpo/trpo_s0/progress.txt' mode='w' encoding='UTF-8'>":	{
+                    "mode":	"w"
+                }
+            }
+        }
+    },
+    "logger_kwargs":	{
+        "exp_name":	"trpo",
+        "output_dir":	"/Users/mathildebadoual/code/safe_rl/trpo/trpo_s0"
+    },
+    "max_ep_len":	1000,
+    "save_freq":	10,
+    "seed":	0,
+    "steps_per_epoch":	4000,
+    "train_v_iters":	80,
+    "vf_lr":	0.001
+}
