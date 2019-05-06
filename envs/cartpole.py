@@ -8,7 +8,7 @@ from gym.utils import seeding
 
 
 class CartPoleEnv():
-    def __init__(self):
+    def __init__(self, store_rendered_frames=False):
         self.gravity = 9.8
         self.masscart = 1.0
         self.masspole = 0.01
@@ -33,6 +33,8 @@ class CartPoleEnv():
 
         self.seed()
         self.viewer = None
+        self.store_rendered_frames = store_rendered_frames
+        self.rendered_frames = []
         self.state = None
         self.previous_state = None
         self.previous_action = None
@@ -99,7 +101,7 @@ class CartPoleEnv():
         self.steps_beyond_done = None
         return np.array(self.state)
 
-    def render(self, mode='human'):
+    def render(self):
         screen_width = 600
         screen_height = 400
 
@@ -147,7 +149,15 @@ class CartPoleEnv():
         self.carttrans.set_translation(cartx, carty)
         self.poletrans.set_rotation(-x[2])
 
-        return self.viewer.render(return_rgb_array=mode == 'rgb_array')
+        # return_rgb_array slows down the rendering process, so only do it if we have to
+        if self.store_rendered_frames:
+            frame = self.viewer.render(return_rgb_array=True)
+            self.rendered_frames.append(frame)
+        else:
+            self.viewer.render(return_rgb_array=False)
+
+    def get_rendered_frames(self):
+        return self.rendered_frames
 
     def close(self):
         if self.viewer:
@@ -160,8 +170,8 @@ class CartPoleEnv():
 
 
 class CartPoleEnvContinous(CartPoleEnv):
-    def __init__(self):
-        super(CartPoleEnvContinous, self).__init__()
+    def __init__(self, *args, **kwargs):
+        super(CartPoleEnvContinous, self).__init__(*args, **kwargs)
         self.action_space = spaces.Box(low=-10, high=10, shape=(1,),
                                        dtype=np.float32)
 
@@ -179,8 +189,8 @@ class CartPoleEnvContinous(CartPoleEnv):
 
 
 class CartPoleEnvDiscrete(CartPoleEnv):
-    def __init__(self):
-        super(CartPoleEnvDiscrete, self).__init__()
+    def __init__(self, *args, **kwargs):
+        super(CartPoleEnvDiscrete, self).__init__(*args, **kwargs)
         self.force_mag = 1
         self.action_space = spaces.Discrete(2)
 

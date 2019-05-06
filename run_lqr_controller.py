@@ -1,5 +1,6 @@
 import argparse
 
+import imageio
 import matplotlib.pyplot as plt
 
 from agents.controllers import LqrController, PidController
@@ -65,10 +66,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--name', type=str, default='lqr_controller')
     parser.add_argument('--render', '-r', action='store_true')
+    parser.add_argument('--save-video', action='store_true')
     parser.add_argument('--max_steps', type=int, default=1000)
     args = parser.parse_args()
 
-    env = CartPoleEnvContinous()
+    if args.save_video and not args.render:
+        raise ValueError('Cant have save-video true but render false.')
+
+    env = CartPoleEnvContinous(store_rendered_frames=args.save_video)
 
     if args.name == 'lqr_controller':
         controller = LqrController(env)
@@ -83,4 +88,11 @@ if __name__ == '__main__':
         max_steps=args.max_steps,
         controller=controller,
     )
+
     plot_results(saved_dict, args.name)
+    if len(env.get_rendered_frames()) > 0:
+        writer = imageio.get_writer('figures/%s.mp4' % args.name, fps=120)
+        for i, frame in enumerate(env.get_rendered_frames()):
+            writer.append_data(frame)
+        writer.close()
+
