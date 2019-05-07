@@ -1,7 +1,6 @@
 import math
 import random
 
-import gym
 import numpy as np
 from gym import logger, spaces
 from gym.utils import seeding
@@ -20,8 +19,8 @@ class CartPoleEnv():
         # Angle at which to fail the episode
         # self.theta_threshold_radians = 12 * 2 * math.pi / 360
         # self.x_threshold = 2.4
-        self.theta_threshold_radians = 12 * 100 * math.pi / 360
-        self.x_threshold = 2.4 * 100
+        self.theta_threshold_radians = 12 * math.pi / 360
+        self.x_threshold = 2.4
 
         high = np.array([
             self.x_threshold * 2,
@@ -81,7 +80,7 @@ class CartPoleEnv():
                     "'reset()' once you receive 'done = True' -- any further "
                     "steps are undefined behavior.")
             self.steps_beyond_done += 1
-            reward = 0.0
+            reward = 0
 
         return done, reward
 
