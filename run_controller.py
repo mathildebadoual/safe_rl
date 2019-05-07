@@ -52,13 +52,19 @@ def run_controller(env, controller, max_steps_simulation=200, render=False):
 
 def plot_results(saved_dict, figure_name):
     plt.figure(figsize=(10, 7))
-    plt.plot(saved_dict['x'], label='x')
-    plt.plot(saved_dict['xdot'], label='x dot')
-    plt.plot(saved_dict['theta'], label='theta')
-    plt.plot(saved_dict['thetadot'], label='theta dot')
-    plt.plot(saved_dict['action'], label='action')
-    plt.grid()
-    plt.legend()
+
+    fig, ax = plt.subplots(2, 1)
+    fig.set_size_inches(10, 7)
+    ax[0].plot(saved_dict['x'], label='x')
+    ax[0].plot(saved_dict['xdot'], label='x dot')
+    ax[0].plot(saved_dict['theta'], label='theta')
+    ax[0].plot(saved_dict['thetadot'], label='theta dot')
+    ax[1].plot(saved_dict['action'], label='action')
+
+    ax[0].grid()
+    ax[0].legend()
+    ax[1].legend()
+    ax[1].grid()
     plt.savefig('figures/%s.png' % figure_name)
 
 
