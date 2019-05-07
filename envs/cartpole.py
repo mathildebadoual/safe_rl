@@ -19,7 +19,7 @@ class CartPoleEnv():
         # Angle at which to fail the episode
         # self.theta_threshold_radians = 12 * 2 * math.pi / 360
         # self.x_threshold = 2.4
-        self.theta_threshold_radians = 12 * math.pi / 360
+        self.theta_threshold_radians = 12 * 2 * math.pi / 360
         self.x_threshold = 2.4
 
         high = np.array([
@@ -91,7 +91,7 @@ class CartPoleEnv():
     def reset(self, init_state=None):
         if init_state is None:
             # self.state = self.observation_space.sample()
-            self.state = np.array([0, 0, random.uniform(-0.1, 0.1), 0])
+            self.state = np.array([0, 0, random.uniform(-0.15, 0.15), 0])
         else:
             self.state = init_state
         self.previous_state = self.state
