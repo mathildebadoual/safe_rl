@@ -1,121 +1,96 @@
 import numpy as np
-import tensorflow as tf
-from keras import backend as K
-from keras.layers import (Conv2D, Dense, Dropout, Flatten, Input, Lambda,
-                          MaxPooling2D, Multiply)
-from keras.models import Model, Sequential, load_model
-from keras.optimizers import Adam, Adamax, RMSprop
+from keras.layers import Dense
+from keras.models import Sequential
+from keras.optimizers import Adam
 
 
-def categorical_crossentropy(target, output):
-    _epsilon = tf.convert_to_tensor(10e-8, dtype=output.dtype.base_dtype)
-    output = tf.clip_by_value(output, _epsilon, 1. - _epsilon)
-    return (- target * tf.log(output))
+class ActorCriticAgent:
+    def __init__(self, env, load_model=False, actor_lr=0.001,
+                 critic_lr=0.005,
+                 discount_factor=0.99):
 
-
-class actor_critic():
-    def __init__(self, env, actor_learning_rate=1e-3,
-                 critic_learning_rate=1e-3, gamma=0.9):
         self.env = env
-        self.actions_space_dim = env.action_space.n
-        self.observation_dim = env.observation_space.shape[0]
-        self.actor_learning_rate = actor_learning_rate
-        self.critic_learning_rate = critic_learning_rate
-        self.gamma = gamma
-        self.log_path = './actor_critic.log'
-        self.dummy_act_picked = np.zeros((1, self.actions_space_dim))
+        self.load_model = load_model
 
-        # Actor nn
-        input = Input(shape=(self.observation_dim,))
-        hidden = Dense(20, activation='relu')(input)
-        actions_prob = Dense(self.actions_space_dim,
-                             activation='softmax')(hidden)
-        action_picked = Input(shape=(self.actions_space_dim,))
-        action = Multiply()([actions_prob, action_picked])
-        action = Lambda(lambda x: K.sum(
-            x, axis=-1, keepdims=True), output_shape=(1,))(action)
-        model = Model(inputs=[input, action_picked],
-                      outputs=[actions_prob, action])
-        opt = Adam(lr=self.actor_learning_rate)
-        model.compile(loss=['mse', categorical_crossentropy],
-                      loss_weights=[0.0, 1.0], optimizer=opt)
-        self.actor = model
+        self.state_size = self.env.observation_space.shape[0]
+        self.action_size = self.env.action_space.shape[0]
+        self.value_size = 1
+        self.num_action_discrete = 100
 
-        # Critic nn
-        model = Sequential()
-        model.add(Dense(20, activation='relu',
-                        input_shape=(self.observation_dim,)))
-        model.add(Dense(1))
-        opt = Adam(lr=self.critic_learning_rate)
-        model.compile(loss='mse', optimizer=opt)
-        self.critic = model
+        # These are hyper parameters for the Policy Gradient
+        self.discount_factor = discount_factor
+        self.actor_lr = actor_lr
+        self.critic_lr = critic_lr
 
-    def train(self):
-        log = open(self.log_path, 'w')
-        log.write('reward, avg_reward \n')
-        batch_size = 1
-        frames, prob_actions, dlogps, drs = [], [], [], []
-        tr_x, tr_y = [], []
-        reward_record = []
-        avg_reward = []
-        reward_sum = 0
-        ep_number = 0
-        ep_step = 0
-        observation = self.env.reset()
+        # create model for policy network
+        self.actor = self.build_actor()
+        self.critic = self.build_critic()
 
-        while True:
-            act = np.random.choice(np.arange(
-                self.actions_space_dim),
-                p=self.actor.predict([np.expand_dims(observation, axis=0),
-                                      self.dummy_act_picked])[0].flatten())
+        # for discretize_action
+        min_action = self.env.action_space.low
+        max_action = self.env.action_space.high
+        self.action_discrete = np.linspace(min_action, max_action,
+                                           self.num_action_discrete)
 
-            act_one_hot = np.zeros((1, self.actions_space_dim))
-            act_one_hot[0, act] = 1.0
-            next_observation, reward, done, info = self.env.step(act)
-            if done:
-                reward = -20
+        if self.load_model:
+            self.actor.load_weights("./agents/save_model/model_actor.h5")
+            self.critic.load_weights("./agents/save_model/model_critic.h5")
 
-            reward_sum += reward
-            predict_reward = self.critic.predict(
-                np.expand_dims(observation, axis=0))
-            predict_next_reward = self.critic.predict(
-                np.expand_dims(next_observation, axis=0))
+    # approximate policy and value using Neural Network
+    # actor: state is input and probability of each action is output of model
+    def build_actor(self):
+        actor = Sequential()
+        actor.add(Dense(24, input_dim=self.state_size, activation='relu',
+                        kernel_initializer='he_uniform'))
+        actor.add(Dense(self.num_action_discrete, activation='softmax',
+                        kernel_initializer='he_uniform'))
+        actor.summary()
+        # See note regarding crossentropy in cartpole_reinforce.py
+        actor.compile(loss='categorical_crossentropy',
+                      optimizer=Adam(lr=self.actor_lr))
+        return actor
 
-            td_target = np.expand_dims(
-                reward, axis=0) + self.gamma * predict_next_reward
-            td_error = td_target - predict_reward
+    # critic: state is input and value of state is output of model
+    def build_critic(self):
+        critic = Sequential()
+        critic.add(Dense(24, input_dim=self.state_size, activation='relu',
+                         kernel_initializer='he_uniform'))
+        critic.add(Dense(self.value_size, activation='linear',
+                         kernel_initializer='he_uniform'))
+        critic.summary()
+        critic.compile(loss="mse", optimizer=Adam(lr=self.critic_lr))
+        return critic
 
-            self.critic.train_on_batch(
-                np.expand_dims(observation, axis=0), td_target)
-            self.actor.train_on_batch([np.expand_dims(observation, axis=0),
-                                       act_one_hot],
-                                      [self.dummy_act_picked, td_error])
+    def get_action(self, state):
+        state = np.reshape(state, [1, self.state_size])
+        policy = self.actor.predict(state, batch_size=1).flatten()
+        idx = np.argmax(policy)
+        action = self.action_discrete[idx]
+        return action
 
-            observation = next_observation
+    def train_model(self, state, action, reward, next_state, done):
+        state = np.reshape(state, [1, self.state_size])
+        next_state = np.reshape(next_state, [1, self.state_size])
 
-            self.t += 1
-            ep_step += 1
+        target = np.zeros((1, self.value_size))
+        advantages = np.zeros((1, self.num_action_discrete))
 
-            if done or ep_step > MAX_TIMESTEP:
-                ep_number += 1
+        value = self.critic.predict(state)[0]
+        next_value = self.critic.predict(next_state)[0]
 
-                avg_reward.append(float(reward_sum))
-                if len(avg_reward) > 30:
-                    avg_reward.pop(0)
+        action_index = self.discretize_action(action)
 
-                print('EPISODE: {0:6d} / TIMESTEP: {1:8d} / REWARD: {2:5d} / AVG_REWARD: {3:2.3f} '.format(
-                    ep_number, self.t, int(reward_sum), np.mean(avg_reward)))
-                print('{:.4f},{:.4f}'.format(reward_sum, np.mean(
-                    avg_reward)), end='\n', file=log, flush=True)
+        if done:
+            advantages[0][action_index] = reward - value
+            target[0][0] = reward
+        else:
+            advantages[0][action_index] = reward + self.discount_factor * \
+                (next_value) - value
+            target[0][0] = reward + self.discount_factor * next_value
 
-                observation = self.env.reset()
-                reward_sum = 0.0
-                ep_step = 0
+        self.actor.fit(state, advantages, epochs=1, verbose=0)
+        self.critic.fit(state, target, epochs=1, verbose=0)
 
-            if ep_number >= MAX_EP:
-                self.actor.save('actor.h5')
-                self.critic.save('critictor.h5')
-                break
-
-    def get_action(self, observation):
-        pass
+    def discretize_action(self, action):
+        idx = (np.abs(self.action_discrete - action)).argmin()
+        return idx
