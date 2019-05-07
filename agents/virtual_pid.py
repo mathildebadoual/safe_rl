@@ -13,11 +13,11 @@ def _clamp(value, limits):
     return value
 
 
-
 class PID(object):
     """
     A simple PID controller. No fuss.
     """
+
     def __init__(self,
                  Kp=1.0, Ki=0.0, Kd=0.0,
                  setpoint=0,

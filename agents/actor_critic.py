@@ -33,8 +33,8 @@ class ActorCriticAgent:
                                            self.num_action_discrete)
 
         if self.load_model:
-            self.actor.load_weights("./save_model/cartpole_actor.h5")
-            self.critic.load_weights("./save_model/cartpole_critic.h5")
+            self.actor.load_weights("./agents/save_model/model_actor.h5")
+            self.critic.load_weights("./agents/save_model/model_critic.h5")
 
     # approximate policy and value using Neural Network
     # actor: state is input and probability of each action is output of model
@@ -62,12 +62,16 @@ class ActorCriticAgent:
         return critic
 
     def get_action(self, state):
+        state = np.reshape(state, [1, self.state_size])
         policy = self.actor.predict(state, batch_size=1).flatten()
         idx = np.argmax(policy)
         action = self.action_discrete[idx]
         return action
 
     def train_model(self, state, action, reward, next_state, done):
+        state = np.reshape(state, [1, self.state_size])
+        next_state = np.reshape(next_state, [1, self.state_size])
+
         target = np.zeros((1, self.value_size))
         advantages = np.zeros((1, self.num_action_discrete))
 

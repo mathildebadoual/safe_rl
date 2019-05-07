@@ -1,13 +1,15 @@
 import argparse
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 from agents.controllers import LqrController, PidController, HybridController
 from envs.cartpole import CartPoleEnvContinous
 
 
-def run_controller(env, controller, max_steps_simulation=1000, render=False):
-    obs = env.reset()
+def run_controller(env, controller, max_steps_simulation=200, render=False):
+    init_state = np.array([0, 0, 0.1, 0])
+    obs = env.reset(init_state=init_state)
     x_list = []
     xdot_list = []
     theta_list = []
@@ -24,7 +26,6 @@ def run_controller(env, controller, max_steps_simulation=1000, render=False):
         theta_list.append(state[2])
         thetadot_list.append(state[3])
         t = i * env.tau
-        print(state)
         action = controller.get_action(state, t=t)
         action_list.append(action)
         try:
@@ -66,6 +67,8 @@ if __name__ == '__main__':
     parser.add_argument('--controller', '-c', type=str,
                         default='lqr_controller')
     parser.add_argument('--render', '-r', action='store_true')
+    parser.add_argument('--train_model', '-t', action='store_true')
+    parser.add_argument('--load_model', '-l', action='store_true')
     parser.add_argument('--max_steps', type=int, default=1000)
     args = parser.parse_args()
 
@@ -76,7 +79,8 @@ if __name__ == '__main__':
     elif args.controller == 'pid_controller':
         controller = PidController()
     elif args.controller == 'hybrid_controller':
-        controller = HybridController(env)
+        controller = HybridController(env, load_model=args.load_model,
+                                      train_model=args.train_model)
     else:
         raise ValueError("Invalid controller name given. Was %s"
                          % args.controller)

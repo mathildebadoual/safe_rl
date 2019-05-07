@@ -80,7 +80,7 @@ class CartPoleEnv():
                     "'reset()' once you receive 'done = True' -- any further "
                     "steps are undefined behavior.")
             self.steps_beyond_done += 1
-            reward = 0
+            reward = -100
 
         return done, reward
 

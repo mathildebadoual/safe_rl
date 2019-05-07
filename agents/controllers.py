@@ -52,15 +52,18 @@ class PidController(Controller):
 
 # hybrid controller = LQR + ActorCritic
 class HybridController(Controller):
-    def __init__(self, env):
+    def __init__(self, env, load_model=False, train_model=False):
         self.env = env
         self.lqr_controller = LqrController(self.env)
         if os.path.isfile('./agents/save_model/model_actor.h5') and \
                 os.path.isfile('./agents/save_model/model_critic.h5'):
-            print("True")
             self.actor_critic = ActorCriticAgent(self.env, load_model=True)
         else:
-            self.actor_critic = ActorCriticAgent(self.env)
+            self.actor_critic = ActorCriticAgent(self.env,
+                                                 load_model=load_model)
+            train_model = True
+
+        if train_model:
             self.run_training()
 
     def get_action(self, state, t=None):
@@ -69,24 +72,20 @@ class HybridController(Controller):
         action = action_ac + action_lqr
         return action
 
-    def run_training(self, num_episodes=100, max_score=100,
-                     max_iteration=100):
+    def run_training(self, num_episodes=200, max_score=100,
+                     max_iteration=200):
         scores, episodes = [], []
 
         for e in range(num_episodes):
             done = False
             score = 0
             state = self.env.reset()
-            state = np.reshape(state, [1, self.actor_critic.state_size])
 
             iteration = 0
             while not done:
                 iteration += 1
                 action = self.get_action(state)
                 next_state, reward, done = self.env.step(action)
-                next_state = np.reshape(next_state,
-                                        [1, self.actor_critic.state_size])
-                # if an action make the episode end, then gives penalty of -100
                 reward = reward if not done or score == 499 else -100
 
                 self.actor_critic.train_model(state, action, reward,
@@ -97,6 +96,7 @@ class HybridController(Controller):
 
                 if iteration > max_iteration:
                     done = True
+                    score += 100
 
                 if done:
                     # every episode, plot the play time
@@ -113,6 +113,6 @@ class HybridController(Controller):
             # save the model
             if e % 50 == 0:
                 self.actor_critic.actor.save_weights(
-                    "./agents/save_model/cartpole_actor.h5")
+                    './agents/save_model/model_actor.h5')
                 self.actor_critic.critic.save_weights(
-                    "./agents/save_model/cartpole_critic.h5")
+                    './agents/save_model/model_critic.h5')
