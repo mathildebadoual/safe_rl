@@ -20,7 +20,8 @@ class CartPoleEnv():
         # self.theta_threshold_radians = 12 * 2 * math.pi / 360
         # self.x_threshold = 2.4
         self.theta_threshold_radians = 12 * 2 * math.pi / 360
-        self.x_threshold = 2.4
+        self.theta_threshold_radians = 180 * math.pi / 180 # 12 * 2 * math.pi / 360
+        self.x_threshold = 2.4 * 1000
 
         high = np.array([
             self.x_threshold * 2,
@@ -109,7 +110,7 @@ class CartPoleEnv():
         scale = screen_width / world_width
         carty = 100  # TOP OF CART
         polewidth = 10.0
-        polelen = scale * 1.0 / 10
+        polelen = scale * 1.0
         cartwidth = 50.0
         cartheight = 30.0
 
