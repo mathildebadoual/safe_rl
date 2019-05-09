@@ -42,12 +42,13 @@ class LqrController(Controller):
 
 class PidController(Controller):
     def __init__(self):
-        self.pid = PID(1, 0.1, 0.05, setpoint=0)
+        self.pid_position = PID(1, 0, 3, setpoint=0)
+        self.pid_angle = PID(40, 0, 8, setpoint=0)
 
     def get_action(self, state, t=None):
         if t is None:
-            print('t should be given for PID')
-        return self.pid(t, state[0])
+            raise ValueError('t should be given for PID')
+        return self.pid_angle(t, -state[2]) + self.pid_angle(t, -state[0])
 
 
 # hybrid controller = LQR + ActorCritic
